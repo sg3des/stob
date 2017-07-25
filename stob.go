@@ -2,6 +2,7 @@ package stob
 
 import (
 	"encoding/binary"
+	"errors"
 	"io"
 	"log"
 	"reflect"
@@ -11,6 +12,9 @@ import (
 	"unsafe"
 )
 
+type Endian string
+type Size uint8
+
 var (
 	DefaultEndian Endian = "le"
 	LittleEndian  Endian = "le"
@@ -18,11 +22,24 @@ var (
 
 	TRUE  = []byte{0x01}
 	FALSE = []byte{0x00}
+
+	Size8  Size = 1
+	Size16 Size = 2
+	Size32 Size = 4
+	Size64 Size = 8
 )
 
-type Endian string
+func writeInt(w io.Writer, x interface{}, e Endian) error {
+	switch e {
+	case BigEndian:
+		return binary.Write(w, binary.BigEndian, x)
+	case LittleEndian:
+		return binary.Write(w, binary.LittleEndian, x)
+	}
+	return errors.New("unknown endian")
+}
 
-func Write(w io.Writer, i interface{}) {
+func Write(w io.Writer, i interface{}) (err error) {
 	v := reflect.ValueOf(i)
 	if v.Kind() == reflect.Ptr {
 		v = v.Elem()
@@ -33,41 +50,49 @@ func Write(w io.Writer, i interface{}) {
 		f := v.Field(i)
 
 		l, e := readTag(t.Field(i))
-		if l == 0 && (f.Kind() == reflect.Array || f.Kind() == reflect.Slice) {
-			l = f.Len()
+		if l == 0 {
+			if f.Kind() == reflect.Array || f.Kind() == reflect.Slice {
+				l = f.Len()
+			}
 		}
 
 		switch f.Interface().(type) {
 		case int:
-			switch e {
-			case BigEndian:
-				binary.Write(w, binary.BigEndian, f.Int())
-			case LittleEndian:
-				binary.Write(w, binary.LittleEndian, f.Int())
+			switch unsafe.Sizeof(i) {
+			case 8:
+				err = writeInt(w, int64(f.Int()), e)
+			case 4:
+				err = writeInt(w, int32(f.Int()), e)
 			}
+
+		case int8:
+			err = writeInt(w, int8(f.Int()), e)
+		case int16:
+			err = writeInt(w, int16(f.Int()), e)
+		case int32:
+			err = writeInt(w, int32(f.Int()), e)
+		case int64:
+			err = writeInt(w, int64(f.Int()), e)
+
+		case byte: //same as uint8
+			w.Write([]byte{byte(f.Uint())})
+		case uint16:
+			writeInt(w, uint16(f.Uint()), e)
+		case uint32:
+			writeInt(w, uint32(f.Uint()), e)
+		case uint64:
+			writeInt(w, uint64(f.Uint()), e)
+		case uint:
+			writeInt(w, uint(f.Uint()), e)
 
 		case float32:
-			switch e {
-			case BigEndian:
-				binary.Write(w, binary.BigEndian, float32(f.Float()))
-			case LittleEndian:
-				binary.Write(w, binary.LittleEndian, float32(f.Float()))
-			}
-
+			writeInt(w, float32(f.Float()), e)
 		case float64:
-			switch e {
-			case BigEndian:
-				binary.Write(w, binary.BigEndian, f.Float())
-			case LittleEndian:
-				binary.Write(w, binary.LittleEndian, f.Float())
-			}
+			writeInt(w, f.Float(), e)
 
 		case string:
 			w.Write([]byte(f.String()))
 			w.Write(FALSE)
-
-		case byte:
-			w.Write([]byte{byte(f.Uint())})
 
 		case []byte:
 			w.Write(getBytes(f, l))
@@ -86,7 +111,7 @@ func Write(w io.Writer, i interface{}) {
 		default:
 
 			if l == 0 {
-				log.Println("WARNING! for field %s сould not determine length", f.Type().Field(i).Name)
+				log.Printf("WARNING! for field %s сould not determine length\n", f.Type().Field(i).Name)
 				continue
 			}
 
@@ -99,7 +124,13 @@ func Write(w io.Writer, i interface{}) {
 
 		}
 
+		if err != nil {
+			return
+		}
+
 	}
+
+	return
 }
 
 func getBytes(f reflect.Value, l int) (data []byte) {
@@ -125,6 +156,12 @@ func readTag(sf reflect.StructField) (length int, endian Endian) {
 	return
 }
 
+func readInt(r io.Reader, s Size, e Endian) int64 {
+	b := make([]byte, s)
+	r.Read(b)
+	return Btoi(b, e)
+}
+
 func Read(r io.Reader, i interface{}) {
 	v := reflect.ValueOf(i)
 	if v.Kind() == reflect.Ptr {
@@ -136,38 +173,40 @@ func Read(r io.Reader, i interface{}) {
 		f := v.Field(i)
 
 		l, e := readTag(t.Field(i))
-		if l == 0 && (f.Kind() == reflect.Array || f.Kind() == reflect.Slice) {
-			l = f.Len()
+		if l == 0 {
+			if f.Kind() == reflect.Array || f.Kind() == reflect.Slice {
+				l = f.Len()
+			}
 		}
 
 		switch f.Interface().(type) {
 		case int:
-			b := make([]byte, unsafe.Sizeof(i))
-			r.Read(b)
-			f.SetInt(int64(Btoi(b, e)))
-
+			f.SetInt(readInt(r, Size(unsafe.Sizeof(i)), e))
+		case int8:
+			f.SetInt(readInt(r, Size8, e))
+		case int16:
+			f.SetInt(readInt(r, Size16, e))
 		case int32:
-			b := make([]byte, 4)
-			r.Read(b)
-			f.Set(reflect.ValueOf(int32(Btoi(b, e))))
-
+			f.SetInt(readInt(r, Size32, e))
 		case int64:
-			b := make([]byte, 8)
-			r.Read(b)
-			f.Set(reflect.ValueOf(int64(Btoi(b, e))))
+			f.SetInt(readInt(r, Size64, e))
+
+		case uint8: //same as byte
+			f.SetUint(uint64(readInt(r, Size8, e)))
+		case uint16:
+			f.SetUint(uint64(readInt(r, Size16, e)))
+		case uint32:
+			f.SetUint(uint64(readInt(r, Size32, e)))
+		case uint64:
+			f.SetUint(uint64(readInt(r, Size64, e)))
 
 		case string:
 			f.SetString(readString(r))
 
-		case byte:
-			b := make([]byte, 1)
-			r.Read(b)
-			f.Set(reflect.ValueOf(b[0]))
-
 		case []byte:
 			l, _ := readTag(v.Type().Field(i))
 			if l == 0 {
-				log.Println("WARNING! for field %s сould not determine length", f.Type().Field(i).Name)
+				log.Printf("WARNING! for field %s сould not determine length\n", f.Type().Field(i).Name)
 				continue
 			}
 			b := make([]byte, l)
@@ -212,7 +251,7 @@ func Read(r io.Reader, i interface{}) {
 		default:
 
 			if l == 0 {
-				log.Println("WARNING! for field %s сould not determine length", f.Type().Field(i).Name)
+				log.Printf("WARNING! for field %s сould not determine length", t.Field(i).Name)
 				continue
 			}
 
@@ -233,16 +272,16 @@ func Read(r io.Reader, i interface{}) {
 	}
 }
 
-func Btoi(b []byte, endian Endian) (a int) {
+func Btoi(b []byte, endian Endian) (a int64) {
 	l := len(b)
 	switch endian {
 	case BigEndian:
 		for i := range b {
-			a |= int(b[i]) << uint((l-i-1)*8)
+			a |= int64(b[i]) << uint((l-i-1)*8)
 		}
 	case LittleEndian:
 		for i := range b {
-			a |= int(b[i]) << uint(i*8)
+			a |= int64(b[i]) << uint(i*8)
 		}
 	}
 
