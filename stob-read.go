@@ -3,14 +3,13 @@ package stob
 import (
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"reflect"
 )
 
 func (s *Struct) Read(p []byte) (n int, err error) {
 	for _, f := range s.fields {
-		log.Println(f.rsf.Name, f.len, n)
+		// log.Println(f.rsf.Name, f.len, n)
 		if f.len+n >= len(p) {
 			return n, io.ErrUnexpectedEOF
 		}
@@ -104,7 +103,6 @@ func putString(p []byte, s []byte, l int) int {
 	} else if len(s) < l {
 		s = append(s, make([]byte, l-len(s))...)
 	}
-	log.Println(s, len(s), l)
 
 	for i := 0; i < l; i++ {
 		p[i] = s[i]

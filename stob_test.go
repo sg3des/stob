@@ -11,18 +11,18 @@ import (
 )
 
 type YourStruct struct {
-	DstHwAddr HwAddr
-	SrcHwAddr *HwAddr
-	Str       string
-	SliceStr  []string  `num:"2" size:"6"`
-	ArrayStr  [2]string `size:"8"`
-	Int       int       `bo:"le"`
-	Byte      byte
-	Bytes     []byte `num:"6"`
-	Bytes4    [4]byte
-	Bool      bool
-	Float32   float32 `bo:"be"`
-	Uint16    uint16
+	// DstHwAddr HwAddr
+	// SrcHwAddr *HwAddr
+	Str string
+	// SliceStr  []string  `num:"2" size:"6"`
+	// ArrayStr  [2]string `size:"8"`
+	Int     int `bo:"le"`
+	Byte    byte
+	Bytes   []byte `num:"6"`
+	Bytes4  [4]byte
+	Bool    bool
+	Float32 float32 `bo:"be"`
+	Uint16  uint16
 }
 
 type HwAddr struct {
@@ -47,16 +47,16 @@ func init() {
 
 func TestWriteRead(t *testing.T) {
 	a := YourStruct{
-		DstHwAddr: HwAddr{[6]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
-		SrcHwAddr: &HwAddr{[6]byte{0x55, 0x55, 0x55, 0x55, 0x55, 0x55}},
-		Str:       "string",
-		Int:       999,
-		Byte:      255,
-		Bytes:     []byte{1, 2, 3, 4, 5, 6, 7, 8},
-		Bytes4:    [4]byte{10, 11, 12, 13},
-		Bool:      rand.Intn(2) == 1,
-		Float32:   0.98765,
-		Uint16:    65500,
+		// DstHwAddr: HwAddr{[6]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
+		// SrcHwAddr: &HwAddr{[6]byte{0x55, 0x55, 0x55, 0x55, 0x55, 0x55}},
+		Str:     "string",
+		Int:     999,
+		Byte:    255,
+		Bytes:   []byte{1, 2, 3, 4, 5, 6, 7, 8},
+		Bytes4:  [4]byte{10, 11, 12, 13},
+		Bool:    rand.Intn(2) == 1,
+		Float32: 0.98765,
+		Uint16:  65500,
 	}
 
 	s, err := NewStruct(&a)

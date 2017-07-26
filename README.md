@@ -12,6 +12,7 @@ Unfortunately `go` does not allow do it also as simple as it can be done on `C`.
 
 stob use reflection for read and write struct to bytes.
 
+
 # Install
 
 ```
@@ -22,13 +23,13 @@ go get github.com/sg3des/stob
 
 ```go
 type YourStruct struct {
-	Str      string
-	Int      int `stob:",le"`
+	Str      string 
+	Int      int `bo:"le"`
 	Byte     byte
-	Bytes    []byte `stob:"8"`
+	Bytes    []byte `num:"8"`
 	Bytes4   [4]byte
 	Bool     bool
-	Float    float32 `stob:",be"`
+	Float    float32 `bo:"be"`
 }
 
 a := YourStruct{
@@ -57,8 +58,24 @@ to restore struct from bytes:
 stob.Read(r, &a)
 ```
 
+## Tags
+
+stob knows 3 tags:
+
+ * `bo:"le"` or `bo:"be"` - it`s byte order little or big endian
+ * `num:"8"` - count of elements in slice
+ * `size:"4"` - size of element, example size of string, but it also allows read\write big integers to small number of bytes.
+
+**WARNING:** if `[]byte` slice does not have *num* tag, then all next bytes will be writed to this field!
+
+
+# Benchmark
+
+BenchmarkRead-8    2000000    762 ns/op    10 B/op    10 allocs/op
+BenchmarkWrite-8   2000000    750 ns/op    24 B/op    6 allocs/op
+
 # TODO
 
-* main types
+* types
 * tests
 * reader and writer for custom types

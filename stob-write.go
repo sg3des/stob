@@ -3,14 +3,13 @@ package stob
 import (
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"reflect"
 )
 
 func (s *Struct) Write(p []byte) (n int, err error) {
 	for _, f := range s.fields {
-		log.Println(f.rsf.Name, f.len, n)
+		// log.Println(f.rsf.Name, f.len, n)
 
 		if f.len+n >= len(p) {
 			return n, io.ErrUnexpectedEOF
@@ -61,9 +60,9 @@ func (f *field) setWriter() (err error) {
 		// case []uint, []uint16, []uint32, []uint64:
 		// 	f.write = f.writeSliceUint
 		case []byte:
-			if f.len == 0 {
-				return fmt.Errorf("Field %s type []byte should have count nums in tags: `num:\"#\"`", f.rsf.Name)
-			}
+			// if f.len == 0 {
+			// 	return fmt.Errorf("Field %s type []byte should have count nums in tags: `num:\"#\"`", f.rsf.Name)
+			// }
 			f.write = f.SetSliceByte
 		// case []bool:
 		// 	f.write = f.writeSliceBool
@@ -226,6 +225,9 @@ func (f *field) SetByte(p []byte) (int, error) {
 }
 
 func (f *field) SetSliceByte(p []byte) (int, error) {
+	if f.len == 0 {
+		f.len = len(p)
+	}
 	f.rv.SetBytes(p[:f.len])
 	return f.len, nil
 }
