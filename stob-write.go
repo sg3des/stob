@@ -3,29 +3,31 @@ package stob
 import (
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"reflect"
 )
 
 func (s *Struct) Write(p []byte) (n int, err error) {
 	for _, f := range s.fields {
-		if n+f.l >= len(p) {
+		log.Println(f.rsf.Name, f.len, n)
+
+		if f.len+n >= len(p) {
 			return n, io.ErrUnexpectedEOF
 		}
 
-		nw := f.write(p[n:])
-		if f.err != nil {
-			return n, f.err
+		nw, err := f.write(p[n:])
+		if err != nil {
+			return n, err
 		}
 
-		// log.Println(f.rsf.Name, n, n+nw)
 		n += nw
 	}
 
 	return
 }
 
-type fieldWriter func(p []byte) int
+type fieldWriter func(p []byte) (int, error)
 
 func (f *field) setWriter() (err error) {
 	switch f.rk {
@@ -52,13 +54,16 @@ func (f *field) setWriter() (err error) {
 	case reflect.Slice:
 
 		switch f.rv.Interface().(type) {
-		// case []string:
-		// 	f.write = f.writeSliceString
+		case []string:
+			f.write = f.SetSliceString
 		// case []int, []int8, []int16, []int32, []int64:
 		// 	f.write = f.writeSliceInt
 		// case []uint, []uint16, []uint32, []uint64:
 		// 	f.write = f.writeSliceUint
 		case []byte:
+			if f.len == 0 {
+				return fmt.Errorf("Field %s type []byte should have count nums in tags: `num:\"#\"`", f.rsf.Name)
+			}
 			f.write = f.SetSliceByte
 		// case []bool:
 		// 	f.write = f.writeSliceBool
@@ -69,8 +74,8 @@ func (f *field) setWriter() (err error) {
 	case reflect.Array:
 
 		switch f.rv.Index(0).Interface().(type) {
-		// case string:
-		// 	f.write = f.writeArrayString
+		case string:
+			f.write = f.SetArrayString
 		// case int, int8, int16, int32, int64:
 		// 	f.write = f.writeSliceInt
 		// case uint, uint16, uint32, uint64:
@@ -101,126 +106,185 @@ func (f *field) setWriter() (err error) {
 //
 //string
 
-func Btos(p []byte) (string, int) {
+//Btos = bytes to string, read byte array to first 0x00 byte, then return string and count of readed bytes.
+func Btos(p []byte) (_ string, n int) {
 	var s []byte
+	var b byte
 
-	for _, b := range p {
+	for n, b = range p {
 		if b == 0x00 {
+			n++
 			break
 		}
 		s = append(s, b)
 	}
 
-	return string(s), len(s) + 1 //1 is 0x00 in end of string
+	return string(s), n
 }
 
-func (f *field) SetString(p []byte) int {
-	if f.l != 0 {
-		s, n := Btos(p[:f.l])
-		f.rv.SetString(string(s))
-		return n
-	}
+func (f *field) SetString(p []byte) (n int, _ error) {
+	var s string
 
-	s, n := Btos(p)
+	if f.size != 0 {
+		s, _ = Btos(p[:f.size])
+		n = f.size
+	} else {
+		s, n = Btos(p)
+	}
 	f.rv.SetString(s)
 
-	return n
+	return
+}
+
+func (f *field) SetSliceString(p []byte) (n int, err error) {
+	var ss []string
+	var s string
+	var ns int
+
+	for {
+		if f.num != 0 && len(ss) >= f.num {
+			break
+		}
+
+		if n >= len(p) {
+			break
+		}
+
+		if f.size != 0 {
+			if n+f.size >= len(p) {
+				return n, io.ErrUnexpectedEOF
+			}
+
+			s, _ = Btos(p[n : n+f.size])
+			ns = f.size
+		} else {
+			s, ns = Btos(p[n:])
+		}
+
+		ss = append(ss, s)
+		n += ns
+	}
+
+	f.rv.Set(reflect.ValueOf(ss))
+
+	return
+}
+
+func (f *field) SetArrayString(p []byte) (n int, err error) {
+	var s string
+	var ns int
+
+	for i := 0; i < f.rv.Len(); i++ {
+		if f.size != 0 {
+			s, _ = Btos(p[n : n+f.size])
+			n += f.size
+		} else {
+			s, ns = Btos(p[n:])
+			n += ns
+		}
+
+		f.rv.Index(i).SetString(s)
+	}
+
+	return
 }
 
 //
 //int
 
-func (f *field) SetInt(p []byte) int {
-	f.rv.SetInt(Btoi(p[:f.l], f.e))
-	return f.l
+func (f *field) SetInt(p []byte) (int, error) {
+	f.rv.SetInt(Btoi(p[:f.size], f.e))
+	return f.size, nil
 }
 
-func (f *field) SetArrayInt(p []byte) int {
-	var count = f.rv.Len()
-	var limit = count * f.l
-
+func (f *field) SetArrayInt(p []byte) (n int, err error) {
 	var xx []int64
 	for i := 0; i < f.rv.Len(); i++ {
-		xx = append(xx, Btoi(p[:f.l], f.e))
+		xx = append(xx, Btoi(p[n:n+f.size], f.e))
+		n += f.size
 	}
 
 	f.rv.Set(reflect.ValueOf(xx))
 
-	return limit
+	return
 }
 
 //
 //uint
 
-func (f *field) SetUint(p []byte) int {
-	f.rv.SetUint(uint64(Btoi(p[:f.l], f.e)))
-	return f.l
+func (f *field) SetUint(p []byte) (int, error) {
+	f.rv.SetUint(uint64(Btoi(p[:f.size], f.e)))
+	return f.size, nil
 }
 
 //
 //byte
 
-func (f *field) SetByte(p []byte) int {
+func (f *field) SetByte(p []byte) (int, error) {
 	f.rv.SetUint(uint64(p[0]))
-	return 1
+	return 1, nil
 }
 
-func (f *field) SetSliceByte(p []byte) int {
-	f.rv.SetBytes(p[:f.l])
-	return f.l
+func (f *field) SetSliceByte(p []byte) (int, error) {
+	f.rv.SetBytes(p[:f.len])
+	return f.len, nil
 }
 
-func (f *field) SetArrayByte(p []byte) int {
-	for i := 0; i < f.l; i++ {
+func (f *field) SetArrayByte(p []byte) (int, error) {
+	for i := 0; i < f.rv.Len(); i++ {
 		f.rv.Index(i).Set(reflect.ValueOf(p[i]))
 	}
-	return f.l
+	return f.rv.Len(), nil
 }
 
 //
 //bool
 
-func (f *field) SetBool(p []byte) int {
+func (f *field) SetBool(p []byte) (int, error) {
 	if p[0] != 0x00 {
 		f.rv.SetBool(true)
 	}
-	return 1
+	return 1, nil
 }
 
 //
 //float32
 
-func (f *field) SetFloat32(p []byte) int {
-	x := Btoi(p[:f.l], f.e)
+func (f *field) SetFloat32(p []byte) (int, error) {
+	x := Btoi(p[:f.size], f.e)
 	float := math.Float32frombits(uint32(x))
 	f.rv.SetFloat(float64(float))
 
-	return f.l
+	return f.size, nil
 }
 
 //
 //float64
 
-func (f *field) SetFloat64(p []byte) int {
-	x := Btoi(p[:f.l], f.e)
+func (f *field) SetFloat64(p []byte) (int, error) {
+	x := Btoi(p[:f.size], f.e)
 	float := math.Float64frombits(uint64(x))
 	f.rv.SetFloat(float)
 
-	return f.l
+	return f.size, nil
 }
 
 //
 //struct
-func (f *field) SetStruct(p []byte) (n int) {
+func (f *field) SetStruct(p []byte) (n int, _ error) {
 	for _, subf := range f.s.fields {
-		n += subf.write(p[n:])
+		nw, err := subf.write(p[n:])
+		if err != nil {
+			return n, err
+		}
+		n += nw
 	}
-	return n
+	return n, nil
 }
 
 //
 
-func Btoi(p []byte, e Endian) (x int64) {
+func Btoi(p []byte, e ByteOrder) (x int64) {
 	l := len(p)
 	switch e {
 	case BigEndian:

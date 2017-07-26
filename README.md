@@ -56,3 +56,9 @@ to restore struct from bytes:
 ```go
 stob.Read(r, &a)
 ```
+
+# TODO
+
+* main types
+* tests
+* reader and writer for custom types

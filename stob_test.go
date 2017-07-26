@@ -14,12 +14,14 @@ type YourStruct struct {
 	DstHwAddr HwAddr
 	SrcHwAddr *HwAddr
 	Str       string
-	Int       int `stob:",le"`
+	SliceStr  []string  `num:"2" size:"6"`
+	ArrayStr  [2]string `size:"8"`
+	Int       int       `bo:"le"`
 	Byte      byte
-	Bytes     []byte `stob:"6"`
+	Bytes     []byte `num:"6"`
 	Bytes4    [4]byte
 	Bool      bool
-	Float32   float32 `stob:",be"`
+	Float32   float32 `bo:"be"`
 	Uint16    uint16
 }
 
@@ -63,11 +65,10 @@ func TestWriteRead(t *testing.T) {
 	}
 
 	p := make([]byte, 128)
-	n, err := s.Read(p)
+	nr, err := s.Read(p)
 	if err != nil {
-		t.Error(err)
+		t.Error(err, nr)
 	}
-	t.Log("readed:", n)
 
 	fmt.Println(hex.Dump(p))
 
@@ -77,12 +78,13 @@ func TestWriteRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	n, err = sb.Write(p)
+	nw, err := sb.Write(p)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(err, nw)
 	}
-	t.Log("writed:", n)
-	// t.Logf("%+v", b)
+	if nr != nw {
+		t.Error("count readed bytes and writed bytes are different", nw, nr)
+	}
 
 	if b.Str != a.Str {
 		t.Error("failed read string", b.Str, a.Str)
@@ -105,8 +107,6 @@ func TestWriteRead(t *testing.T) {
 	if b.Float32 != a.Float32 {
 		t.Error("failed read float32", b.Float32, a.Float32)
 	}
-
-	// fmt.Printf("%+v", b)
 }
 
 func TestItob(t *testing.T) {
@@ -129,7 +129,7 @@ func TestItob(t *testing.T) {
 		t.Error("Failed restore float", rf, float)
 	}
 
-	fmt.Println(hex.Dump(p))
+	// fmt.Println(hex.Dump(p))
 }
 
 func BenchmarkRead(b *testing.B) {

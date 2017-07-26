@@ -3,23 +3,19 @@ package stob
 import (
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"reflect"
 )
 
 func (s *Struct) Read(p []byte) (n int, err error) {
 	for _, f := range s.fields {
-		if f.l+n >= len(p) {
+		log.Println(f.rsf.Name, f.len, n)
+		if f.len+n >= len(p) {
 			return n, io.ErrUnexpectedEOF
 		}
 
-		nr := f.read(p[n:])
-		if f.err != nil {
-			return n, f.err
-		}
-
-		// log.Println(f.rsf.Name, n, n+nr, fmt.Sprintf(" : % 02x", p[n:n+nr]))
-		n += nr
+		n += f.read(p[n:])
 	}
 
 	return
@@ -108,6 +104,7 @@ func putString(p []byte, s []byte, l int) int {
 	} else if len(s) < l {
 		s = append(s, make([]byte, l-len(s))...)
 	}
+	log.Println(s, len(s), l)
 
 	for i := 0; i < l; i++ {
 		p[i] = s[i]
@@ -117,12 +114,21 @@ func putString(p []byte, s []byte, l int) int {
 }
 
 func (f *field) String(p []byte) int {
-	return putString(p, []byte(f.rv.String()), f.l)
+	return putString(p, []byte(f.rv.String()), f.size)
 }
 
 func (f *field) SliceString(p []byte) (n int) {
-	for i := 0; i < f.rv.Len(); i++ {
-		n += putString(p[n:], []byte(f.rv.Index(i).String()), f.l)
+	count := f.num
+	if count == 0 {
+		count = f.rv.Len()
+	}
+
+	for i := 0; i < count; i++ {
+		if i < f.rv.Len() {
+			n += putString(p[n:], []byte(f.rv.Index(i).String()), f.size)
+		} else {
+			n += putString(p[n:n+f.size], nil, f.size)
+		}
 	}
 	return n
 }
@@ -131,15 +137,21 @@ func (f *field) SliceString(p []byte) (n int) {
 //int
 
 func (f *field) Int(p []byte) int {
-	Itob(p[:f.l], f.rv.Int(), f.e)
-	return f.l
+	Itob(p[:f.size], f.rv.Int(), f.e)
+	return f.size
 }
 
 func (f *field) SliceInt(p []byte) (n int) {
-	for i := 0; i < f.rv.Len(); i++ {
-		Itob(p[n:n+f.l], f.rv.Index(i).Int(), f.e)
-		n += f.l
+	count := f.num
+	if count == 0 {
+		count = f.rv.Len()
 	}
+
+	for i := 0; i < count; i++ {
+		Itob(p[n:n+f.size], f.rv.Index(i).Int(), f.e)
+		n += f.size
+	}
+
 	return n
 }
 
@@ -147,14 +159,19 @@ func (f *field) SliceInt(p []byte) (n int) {
 //uint
 
 func (f *field) Uint(p []byte) int {
-	Itob(p[:f.l], int64(f.rv.Uint()), f.e)
-	return f.l
+	Itob(p[:f.size], int64(f.rv.Uint()), f.e)
+	return f.size
 }
 
 func (f *field) SliceUint(p []byte) (n int) {
-	for i := 0; i < f.rv.Len(); i++ {
-		Itob(p[n:n+f.l], int64(f.rv.Index(i).Uint()), f.e)
-		n += f.l
+	count := f.num
+	if count == 0 {
+		count = f.rv.Len()
+	}
+
+	for i := 0; i < count; i++ {
+		Itob(p[n:n+f.size], int64(f.rv.Index(i).Uint()), f.e)
+		n += f.size
 	}
 	return n
 }
@@ -168,11 +185,16 @@ func (f *field) Byte(p []byte) int {
 }
 
 func (f *field) Bytes(p []byte) int {
-	var i int
-	for i = 0; i < f.l; i++ {
+	count := f.num
+	if count == 0 {
+		count = f.rv.Len()
+	}
+
+	for i := 0; i < count; i++ {
 		p[i] = f.rv.Index(i).Interface().(byte)
 	}
-	return i
+
+	return count
 }
 
 //
@@ -206,15 +228,20 @@ func (f *field) SliceBool(p []byte) int {
 
 func (f *field) Float32(p []byte) int {
 	uf := math.Float32bits(float32(f.rv.Float()))
-	Itob(p[:f.l], int64(uf), f.e)
-	return f.l
+	Itob(p[:f.size], int64(uf), f.e)
+	return f.size
 }
 
 func (f *field) SliceFloat32(p []byte) (n int) {
-	for i := 0; i < f.rv.Len(); i++ {
+	count := f.num
+	if count == 0 {
+		count = f.rv.Len()
+	}
+
+	for i := 0; i < count; i++ {
 		uf := math.Float32bits(float32(f.rv.Index(i).Float()))
-		Itob(p[n:f.l], int64(uf), f.e)
-		n += f.l
+		Itob(p[n:n+f.size], int64(uf), f.e)
+		n += f.size
 	}
 
 	return
@@ -225,15 +252,20 @@ func (f *field) SliceFloat32(p []byte) (n int) {
 
 func (f *field) Float64(p []byte) int {
 	uf := math.Float64bits(f.rv.Float())
-	Itob(p[:f.l], int64(uf), f.e)
-	return f.l
+	Itob(p[:f.size], int64(uf), f.e)
+	return f.size
 }
 
 func (f *field) SliceFloat64(p []byte) (n int) {
-	for i := 0; i < f.rv.Len(); i++ {
+	count := f.num
+	if count == 0 {
+		count = f.rv.Len()
+	}
+
+	for i := 0; i < count; i++ {
 		uf := math.Float64bits(f.rv.Float())
-		Itob(p[n:f.l], int64(uf), f.e)
-		n += f.l
+		Itob(p[n:n+f.size], int64(uf), f.e)
+		n += f.size
 	}
 
 	return
@@ -250,7 +282,7 @@ func (f *field) Struct(p []byte) (n int) {
 	return n
 }
 
-func Itob(p []byte, x int64, e Endian) {
+func Itob(p []byte, x int64, e ByteOrder) {
 	l := len(p)
 
 	switch e {
