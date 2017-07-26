@@ -71,8 +71,8 @@ stob knows 3 tags:
 
 # Benchmark
 
-BenchmarkRead-8    2000000    762 ns/op    10 B/op    10 allocs/op
-BenchmarkWrite-8   2000000    750 ns/op    24 B/op    6 allocs/op
+	BenchmarkRead-8    2000000    762 ns/op    10 B/op    10 allocs/op
+	BenchmarkWrite-8   2000000    750 ns/op    24 B/op    6 allocs/op
 
 # TODO
 
