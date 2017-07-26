@@ -1,6 +1,7 @@
 package stob
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -11,15 +12,15 @@ import (
 
 type YourStruct struct {
 	DstHwAddr HwAddr
-	// SrcHwAddr *HwAddr
-	Str     string
-	Int     int `stob:",le"`
-	Byte    byte
-	Bytes   []byte `stob:"6"`
-	Bytes4  [4]byte
-	Bool    bool
-	Float32 float32 `stob:",be"`
-	Uint16  uint16
+	SrcHwAddr *HwAddr
+	Str       string
+	Int       int `stob:",le"`
+	Byte      byte
+	Bytes     []byte `stob:"6"`
+	Bytes4    [4]byte
+	Bool      bool
+	Float32   float32 `stob:",be"`
+	Uint16    uint16
 }
 
 type HwAddr struct {
@@ -28,14 +29,6 @@ type HwAddr struct {
 
 func init() {
 	log.SetFlags(log.Lshortfile)
-
-	p := []byte{1, 2, 3, 4, 5, 6}
-	arr(p[2:4])
-	fmt.Println(p)
-}
-
-func arr(p []byte) {
-	p[0] = 10
 }
 
 // func TestBuffer(t *testing.T) {
@@ -53,15 +46,15 @@ func arr(p []byte) {
 func TestWriteRead(t *testing.T) {
 	a := YourStruct{
 		DstHwAddr: HwAddr{[6]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
-		// SrcHwAddr: &HwAddr{[6]byte{0x55, 0x55, 0x55, 0x55, 0x55, 0x55}},
-		Str:     "string",
-		Int:     999,
-		Byte:    255,
-		Bytes:   []byte{1, 2, 3, 4, 5, 6, 7, 8},
-		Bytes4:  [4]byte{10, 11, 12, 13},
-		Bool:    rand.Intn(2) == 1,
-		Float32: 0.98765,
-		Uint16:  65500,
+		SrcHwAddr: &HwAddr{[6]byte{0x55, 0x55, 0x55, 0x55, 0x55, 0x55}},
+		Str:       "string",
+		Int:       999,
+		Byte:      255,
+		Bytes:     []byte{1, 2, 3, 4, 5, 6, 7, 8},
+		Bytes4:    [4]byte{10, 11, 12, 13},
+		Bool:      rand.Intn(2) == 1,
+		Float32:   0.98765,
+		Uint16:    65500,
 	}
 
 	s, err := NewStruct(&a)
@@ -71,7 +64,10 @@ func TestWriteRead(t *testing.T) {
 
 	p := make([]byte, 128)
 	n, err := s.Read(p)
-	log.Println(n, err)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log("readed:", n)
 
 	fmt.Println(hex.Dump(p))
 
@@ -86,38 +82,29 @@ func TestWriteRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log("writed:", n)
-	t.Logf("%+v", b)
+	// t.Logf("%+v", b)
 
-	// if err := Write(buf, a); err != nil {
-	// 	t.Fatal(err)
-	// }
-
-	// // fmt.Println(hex.Dump(buf.Bytes()))
-
-	// var b YourStruct
-	// Read(buf, &b)
-
-	// if b.Str != a.Str {
-	// 	t.Error("failed read string", b.Str, a.Str)
-	// }
-	// if b.Int != a.Int {
-	// 	t.Error("failed read int", b.Int, a.Int)
-	// }
-	// if b.Byte != a.Byte {
-	// 	t.Error("failed read byte", b.Byte, a.Byte)
-	// }
-	// if !bytes.Equal(b.Bytes, a.Bytes) {
-	// 	t.Error("failed read []byte", b.Bytes, a.Bytes)
-	// }
-	// if b.Bytes4 != a.Bytes4 {
-	// 	t.Error("failed read [4]byte", b.Bytes4, a.Bytes4)
-	// }
-	// if b.Bool != a.Bool {
-	// 	t.Error("failed read bool", b.Bool, a.Bool)
-	// }
-	// if b.Float != a.Float {
-	// 	t.Error("failed read float32", b.Float, a.Float)
-	// }
+	if b.Str != a.Str {
+		t.Error("failed read string", b.Str, a.Str)
+	}
+	if b.Int != a.Int {
+		t.Error("failed read int", b.Int, a.Int)
+	}
+	if b.Byte != a.Byte {
+		t.Error("failed read byte", b.Byte, a.Byte)
+	}
+	if !bytes.Equal(b.Bytes, a.Bytes[:6]) {
+		t.Error("failed read []byte", b.Bytes, a.Bytes[:6])
+	}
+	if b.Bytes4 != a.Bytes4 {
+		t.Error("failed read [4]byte", b.Bytes4, a.Bytes4)
+	}
+	if b.Bool != a.Bool {
+		t.Error("failed read bool", b.Bool, a.Bool)
+	}
+	if b.Float32 != a.Float32 {
+		t.Error("failed read float32", b.Float32, a.Float32)
+	}
 
 	// fmt.Printf("%+v", b)
 }
@@ -134,10 +121,13 @@ func TestItob(t *testing.T) {
 		t.Error("LittleEndian failed")
 	}
 
-	Itob(p[8:12], int64(math.Float64bits(1.32)), BigEndian)
+	float := 1.32
+	Itob(p[8:16], int64(math.Float64bits(float)), BigEndian)
 
-	n := Btoi(p[8:12], BigEndian)
-	log.Println(math.Float32frombits(uint32(n)))
+	n := Btoi(p[8:16], BigEndian)
+	if rf := math.Float64frombits(uint64(n)); float != rf {
+		t.Error("Failed restore float", rf, float)
+	}
 
 	fmt.Println(hex.Dump(p))
 }

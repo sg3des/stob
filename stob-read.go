@@ -84,6 +84,10 @@ func (f *field) setReader() (err error) {
 		f.read = f.Struct
 
 	case reflect.Ptr:
+		if f.rv.IsNil() {
+			f.rv.Set(reflect.New(f.rv.Type().Elem()))
+		}
+
 		f.s, err = newStruct(f.rv.Elem())
 		f.read = f.Struct
 

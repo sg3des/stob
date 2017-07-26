@@ -84,11 +84,11 @@ func (f *field) setWriter() (err error) {
 		}
 
 	case reflect.Struct:
-		f.s, err = newStruct(f.rv)
+		// f.s, err = newStruct(f.rv) //already in prepare readers
 		f.write = f.SetStruct
 
 	case reflect.Ptr:
-		f.s, err = newStruct(f.rv.Elem())
+		// f.s, err = newStruct(f.rv.Elem()) // aready on preapre readers
 		f.write = f.SetStruct
 
 	default:
@@ -105,19 +105,20 @@ func Btos(p []byte) (string, int) {
 	var s []byte
 
 	for _, b := range p {
-		s = append(s, b)
 		if b == 0x00 {
 			break
 		}
+		s = append(s, b)
 	}
 
-	return string(s), len(s)
+	return string(s), len(s) + 1 //1 is 0x00 in end of string
 }
 
 func (f *field) SetString(p []byte) int {
 	if f.l != 0 {
-		f.rv.SetString(string(p[:f.l]))
-		return f.l
+		s, n := Btos(p[:f.l])
+		f.rv.SetString(string(s))
+		return n
 	}
 
 	s, n := Btos(p)
@@ -125,18 +126,6 @@ func (f *field) SetString(p []byte) int {
 
 	return n
 }
-
-// func (f *field) writeArrayString(p []byte, n int) (int, error) {
-// 	var err error
-// 	for i := 0; i < f.rv.Len(); i++ {
-// 		n, err = writeString(p, n, f.rv.Index(i))
-// 		if err != nil {
-// 			return n, err
-// 		}
-// 	}
-
-// 	return n, nil
-// }
 
 //
 //int
