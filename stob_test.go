@@ -7,27 +7,32 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"net"
 	"testing"
 )
 
 type YourStruct struct {
-	DstHwAddr HwAddr
-	SrcHwAddr *HwAddr
-	Str       string
-	SliceStr  []string  `num:"2" size:"6"`
-	ArrayStr  [2]string `size:"8"`
-	Int       int       `bo:"le"`
-	Byte      byte
-	Bytes     []byte `num:"6"`
-	Bytes4    [4]byte
-	Bool      bool
-	Float32   float32 `bo:"be"`
-	Uint16    uint16
+	Struct     SubStruct
+	PtrStruct  *SubStruct
+	CustomType CustomType
+	Str        string
+	SliceStr   []string  `num:"2" size:"6"`
+	ArrayStr   [2]string `size:"8"`
+	Int        int       `bo:"le"`
+	Byte       byte
+	Bytes      []byte `num:"6"`
+	Bytes4     [4]byte
+	Bool       bool
+	Float32    float32 `bo:"be"`
+	Uint16     uint16
 }
 
-type HwAddr struct {
-	Addr [6]byte
+type SubStruct struct {
+	Addr net.HardwareAddr `num:"6"`
+	IP   net.IP           `num:"4"`
 }
+
+type CustomType [4]byte
 
 func init() {
 	log.SetFlags(log.Lshortfile)
@@ -47,16 +52,17 @@ func init() {
 
 func TestWriteRead(t *testing.T) {
 	a := YourStruct{
-		DstHwAddr: HwAddr{[6]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
-		SrcHwAddr: &HwAddr{[6]byte{0x55, 0x55, 0x55, 0x55, 0x55, 0x55}},
-		Str:       "string",
-		Int:       999,
-		Byte:      255,
-		Bytes:     []byte{1, 2, 3, 4, 5, 6, 7, 8},
-		Bytes4:    [4]byte{10, 11, 12, 13},
-		Bool:      rand.Intn(2) == 1,
-		Float32:   0.98765,
-		Uint16:    65500,
+		Struct:     SubStruct{Addr: net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}, IP: []byte{127, 0, 0, 1}},
+		PtrStruct:  &SubStruct{Addr: net.HardwareAddr{0x55, 0x55, 0x55, 0x55, 0x55, 0x55}},
+		CustomType: [4]byte{127, 0, 0, 1},
+		Str:        "string",
+		Int:        999,
+		Byte:       255,
+		Bytes:      []byte{1, 2, 3, 4, 5, 6, 7, 8},
+		Bytes4:     [4]byte{10, 11, 12, 13},
+		Bool:       rand.Intn(2) == 1,
+		Float32:    0.98765,
+		Uint16:     65500,
 	}
 
 	s, err := NewStruct(&a)
@@ -86,6 +92,9 @@ func TestWriteRead(t *testing.T) {
 		t.Error("count readed bytes and writed bytes are different", nw, nr)
 	}
 
+	if !bytes.Equal(b.Struct.Addr, a.Struct.Addr) {
+		t.Error("hw addr not equal", b.Struct.Addr, a.Struct.Addr)
+	}
 	if b.Str != a.Str {
 		t.Error("failed read string", b.Str, a.Str)
 	}

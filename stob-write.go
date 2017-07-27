@@ -1,7 +1,6 @@
 package stob
 
 import (
-	"fmt"
 	"io"
 	"math"
 	"reflect"
@@ -67,7 +66,10 @@ func (f *field) setWriter() (err error) {
 		// case []bool:
 		// 	f.write = f.writeSliceBool
 		default:
-			err = fmt.Errorf("Unknown field type, %s:%T", f.rsf.Name, f.rv.Interface())
+			f.write = f.SetCustom
+			// f.rv.Set(reflect.New(f.rv.Type()).Elem())
+			// log.Printf("%T %s\n", f.rv.Interface(), f.rv.Interface())
+			// err = fmt.Errorf("Unknown field type, %s:%T", f.rsf.Name, f.rv.Interface())
 		}
 
 	case reflect.Array:
@@ -81,10 +83,12 @@ func (f *field) setWriter() (err error) {
 		// 	f.write = f.writeSliceUint
 		case byte:
 			f.write = f.SetArrayByte
-		// case bool:
-		// 	f.write = f.writeSliceBool
+			// case bool:
+			// 	f.write = f.writeSliceBool
+			// default:
+			// err = fmt.Errorf("Unknown field type, %s:%T", f.rsf.Name, f.rv.Interface())
 		default:
-			err = fmt.Errorf("Unknown field type, %s:%T", f.rsf.Name, f.rv.Interface())
+			f.write = f.SetCustom
 		}
 
 	case reflect.Struct:
@@ -96,7 +100,8 @@ func (f *field) setWriter() (err error) {
 		f.write = f.SetStruct
 
 	default:
-		err = fmt.Errorf("Unknown field type, %s:%T", f.rsf.Name, f.rv.Interface())
+		f.write = f.SetCustom
+		// err = fmt.Errorf("Unknown field type, %s:%T", f.rsf.Name, f.rv.Interface())
 	}
 
 	return
@@ -285,6 +290,17 @@ func (f *field) SetStruct(p []byte) (n int, _ error) {
 }
 
 //
+//custom types
+
+func (f *field) SetCustom(p []byte) (n int, err error) {
+	count := f.num
+	if count == 0 {
+		count = int(f.rv.Type().Size())
+	}
+
+	f.rv.Set(reflect.ValueOf(p[:count]))
+	return count, nil
+}
 
 func Btoi(p []byte, e ByteOrder) (x int64) {
 	l := len(p)

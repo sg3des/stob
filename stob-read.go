@@ -1,10 +1,10 @@
 package stob
 
 import (
-	"fmt"
 	"io"
 	"math"
 	"reflect"
+	"unsafe"
 )
 
 func (s *Struct) Read(p []byte) (n int, err error) {
@@ -57,6 +57,8 @@ func (f *field) setReader() (err error) {
 			f.read = f.Bytes
 		case []bool:
 			f.read = f.SliceBool
+		default:
+			f.read = f.Custom
 		}
 
 	case reflect.Array:
@@ -72,6 +74,8 @@ func (f *field) setReader() (err error) {
 			f.read = f.Bytes
 		case bool:
 			f.read = f.SliceBool
+		default:
+			f.read = f.Custom
 		}
 
 	case reflect.Struct:
@@ -87,7 +91,9 @@ func (f *field) setReader() (err error) {
 		f.read = f.Struct
 
 	default:
-		err = fmt.Errorf("Unknown field type, %s:%T", f.rsf.Name, f.rv.Interface())
+		f.read = f.Custom
+		// log.Printf("%T\n", f.rv.Interface())
+		// err = fmt.Errorf("Unknown field type, %s:%T", f.rsf.Name, f.rv.Interface())
 	}
 
 	return
@@ -280,6 +286,31 @@ func (f *field) Struct(p []byte) (n int) {
 	return n
 }
 
+//
+// custom types
+
+// Custom use unsafe pointer
+func (f *field) Custom(p []byte) int {
+	count := f.num
+	if count == 0 {
+		count = int(f.rv.Type().Size())
+	}
+
+	ptr := f.rv.Pointer()
+	if ptr != 0 {
+		for i := 0; i < count; i++ {
+			p[i] = *((*byte)(unsafe.Pointer(uintptr(ptr) + uintptr(i))))
+		}
+	} else {
+		for i := 0; i < count; i++ {
+			p[i] = 0x00
+		}
+	}
+
+	return count
+}
+
+//Itob convert int to bytes
 func Itob(p []byte, x int64, e ByteOrder) {
 	l := len(p)
 
