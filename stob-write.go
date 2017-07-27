@@ -8,9 +8,10 @@ import (
 
 func (s *Struct) Write(p []byte) (n int, err error) {
 	for _, f := range s.fields {
-		// log.Println(f.rsf.Name, f.len, n)
 
-		if f.len+n >= len(p) {
+		// log.Println(f.rsf.Name, f.len, n, len(p))
+
+		if f.len+n > len(p) {
 			return n, io.ErrUnexpectedEOF
 		}
 
