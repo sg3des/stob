@@ -28,8 +28,8 @@ type YourStruct struct {
 // 	fmt.Printf("%#v", b)
 // }
 
-func Marshal(s interface{}) []byte {
-	return (*(*[1<<31 - 1]byte)(unsafe.Pointer(&s)))[0 : unsafe.Sizeof(s)+64]
+func Marshal(p *YourStruct) []byte {
+	return (*(*[1<<31 - 1]byte)(unsafe.Pointer(&p)))[:unsafe.Sizeof(&p)]
 }
 
 func Unmarshal(data []byte) unsafe.Pointer {

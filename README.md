@@ -74,6 +74,12 @@ stob knows 3 tags:
 	BenchmarkRead-8    2000000    762 ns/op    10 B/op    10 allocs/op
 	BenchmarkWrite-8   2000000    750 ns/op    24 B/op    6 allocs/op
 
+	unsafe:
+	BenchmarkRead-8    10000000   205 ns/op    0 B/op     0 allocs/op
+	BenchmarkWrite-8   5000000    257 ns/op    16 B/op    1 allocs/op
+
+
+
 # TODO
 
 * types

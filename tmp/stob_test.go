@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
+	"unsafe"
 )
 
 var a YourStruct
@@ -12,7 +13,11 @@ var b YourStruct
 var data []byte
 
 func init() {
-	a = YourStruct{
+
+}
+
+func TestMarshal(t *testing.T) {
+	a := YourStruct{
 		Str:    "string",
 		Int:    999,
 		Byte:   255,
@@ -22,28 +27,25 @@ func init() {
 		Float:  rand.Float32(),
 		Uint16: 65500,
 	}
-}
-
-func TestMarshal(t *testing.T) {
-	data = Marshal(&a)
+	data := (*(*[1<<31 - 1]byte)(unsafe.Pointer(&a)))[:unsafe.Sizeof(YourStruct{})]
 	fmt.Println(hex.Dump(data))
 }
 
-func TestUnmarshal(t *testing.T) {
-	b2 := (*YourStruct)(Unmarshal(data))
-	fmt.Printf("%+v", b2)
-}
+// func TestUnmarshal(t *testing.T) {
+// 	b2 := (*YourStruct)(Unmarshal(data))
+// 	fmt.Printf("%+v", b2)
+// }
 
-func BenchmarkMarshal(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		Marshal(a)
-	}
-}
+// func BenchmarkMarshal(b *testing.B) {
+// 	for i := 0; i < b.N; i++ {
+// 		Marshal(&a)
+// 	}
+// }
 
-func BenchmarkUnmarshal(b *testing.B) {
-	var a *YourStruct
-	for i := 0; i < b.N; i++ {
-		a = (*YourStruct)(Unmarshal(data))
-	}
-	b.Log(a)
-}
+// func BenchmarkUnmarshal(b *testing.B) {
+// 	var a *YourStruct
+// 	for i := 0; i < b.N; i++ {
+// 		a = (*YourStruct)(Unmarshal(data))
+// 	}
+// 	b.Log(a)
+// }
