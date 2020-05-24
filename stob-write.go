@@ -6,6 +6,11 @@ import (
 	"reflect"
 )
 
+type Writer interface {
+	io.Writer
+	Size
+}
+
 func (s *Struct) Write(p []byte) (n int, err error) {
 	for _, f := range s.fields {
 
@@ -15,7 +20,7 @@ func (s *Struct) Write(p []byte) (n int, err error) {
 			return n, io.ErrUnexpectedEOF
 		}
 
-		nw, err := f.write(p[n:])
+		nw, err := f.Write(p[n:])
 		if err != nil {
 			return n, err
 		}
@@ -29,45 +34,68 @@ func (s *Struct) Write(p []byte) (n int, err error) {
 type fieldWriter func(p []byte) (int, error)
 
 func (f *field) setWriter() (err error) {
+	rt := f.rv.Type()
+	if f.rv.Kind() == reflect.Ptr {
+		rt = f.rv.Type().Elem()
+	}
+
+	rv := reflect.New(rt)
+
+	if w, ok := rv.Interface().(Writer); ok {
+		f.rk = f.rv.Kind()
+
+		f.Write = func(p []byte) (int, error) {
+			n, err := w.Write(p)
+			if err != nil {
+				return n, err
+			}
+
+			f.rv.Set(rv.Elem())
+
+			return n, nil
+		}
+		return nil
+	}
+
 	switch f.rk {
 	case reflect.String:
-		f.write = f.SetString
+		f.Write = f.SetString
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		f.write = f.SetInt
+		f.Write = f.SetInt
 
 	case reflect.Uint, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		f.write = f.SetUint
+		f.Write = f.SetUint
 
 	case reflect.Uint8:
-		f.write = f.SetByte
+		f.Write = f.SetByte
 
 	case reflect.Bool:
-		f.write = f.SetBool
+		f.Write = f.SetBool
 
 	case reflect.Float32:
-		f.write = f.SetFloat32
+		f.Write = f.SetFloat32
 	case reflect.Float64:
-		f.write = f.SetFloat64
+		f.Write = f.SetFloat64
 
 	case reflect.Slice:
 
 		switch f.rv.Interface().(type) {
 		case []string:
-			f.write = f.SetSliceString
+			f.Write = f.SetSliceString
 		// case []int, []int8, []int16, []int32, []int64:
-		// 	f.write = f.writeSliceInt
+		// 	f.Write = f.writeSliceInt
 		// case []uint, []uint16, []uint32, []uint64:
-		// 	f.write = f.writeSliceUint
+		// 	f.Write = f.writeSliceUint
 		case []byte:
 			// if f.len == 0 {
 			// 	return fmt.Errorf("Field %s type []byte should have count nums in tags: `num:\"#\"`", f.rsf.Name)
 			// }
-			f.write = f.SetSliceByte
+			f.Write = f.SetSliceByte
 		// case []bool:
-		// 	f.write = f.writeSliceBool
+		// 	f.Write = f.writeSliceBool
 		default:
-			f.write = f.SetCustom
+			f.Write = f.SetCustom
 			// f.rv.Set(reflect.New(f.rv.Type()).Elem())
 			// log.Printf("%T %s\n", f.rv.Interface(), f.rv.Interface())
 			// err = fmt.Errorf("Unknown field type, %s:%T", f.rsf.Name, f.rv.Interface())
@@ -77,31 +105,31 @@ func (f *field) setWriter() (err error) {
 
 		switch f.rv.Index(0).Interface().(type) {
 		case string:
-			f.write = f.SetArrayString
+			f.Write = f.SetArrayString
 		// case int, int8, int16, int32, int64:
-		// 	f.write = f.writeSliceInt
+		// 	f.Write = f.writeSliceInt
 		// case uint, uint16, uint32, uint64:
-		// 	f.write = f.writeSliceUint
+		// 	f.Write = f.writeSliceUint
 		case byte:
-			f.write = f.SetArrayByte
+			f.Write = f.SetArrayByte
 			// case bool:
-			// 	f.write = f.writeSliceBool
+			// 	f.Write = f.writeSliceBool
 			// default:
 			// err = fmt.Errorf("Unknown field type, %s:%T", f.rsf.Name, f.rv.Interface())
 		default:
-			f.write = f.SetCustom
+			f.Write = f.SetCustom
 		}
 
 	case reflect.Struct:
 		// f.s, err = newStruct(f.rv) //already in prepare readers
-		f.write = f.SetStruct
+		f.Write = f.SetStruct
 
 	case reflect.Ptr:
 		// f.s, err = newStruct(f.rv.Elem()) // aready on preapre readers
-		f.write = f.SetStruct
+		f.Write = f.SetStruct
 
 	default:
-		f.write = f.SetCustom
+		f.Write = f.SetCustom
 		// err = fmt.Errorf("Unknown field type, %s:%T", f.rsf.Name, f.rv.Interface())
 	}
 
@@ -109,9 +137,9 @@ func (f *field) setWriter() (err error) {
 }
 
 //
-//string
+// string
 
-//Btos = bytes to string, read byte array to first 0x00 byte, then return string and count of readed bytes.
+// Btos = bytes to string, read byte array to first 0x00 byte, then return string and count of readed bytes.
 func Btos(p []byte) (_ string, n int) {
 	var s []byte
 	var b byte
@@ -195,7 +223,7 @@ func (f *field) SetArrayString(p []byte) (n int, err error) {
 }
 
 //
-//int
+// int
 
 func (f *field) SetInt(p []byte) (int, error) {
 	f.rv.SetInt(Btoi(p[:f.size], f.e))
@@ -215,7 +243,7 @@ func (f *field) SetArrayInt(p []byte) (n int, err error) {
 }
 
 //
-//uint
+// uint
 
 func (f *field) SetUint(p []byte) (int, error) {
 	f.rv.SetUint(uint64(Btoi(p[:f.size], f.e)))
@@ -223,7 +251,7 @@ func (f *field) SetUint(p []byte) (int, error) {
 }
 
 //
-//byte
+// byte
 
 func (f *field) SetByte(p []byte) (int, error) {
 	f.rv.SetUint(uint64(p[0]))
@@ -246,7 +274,7 @@ func (f *field) SetArrayByte(p []byte) (int, error) {
 }
 
 //
-//bool
+// bool
 
 func (f *field) SetBool(p []byte) (int, error) {
 	if p[0] != 0x00 {
@@ -256,7 +284,7 @@ func (f *field) SetBool(p []byte) (int, error) {
 }
 
 //
-//float32
+// float32
 
 func (f *field) SetFloat32(p []byte) (int, error) {
 	x := Btoi(p[:f.size], f.e)
@@ -267,7 +295,7 @@ func (f *field) SetFloat32(p []byte) (int, error) {
 }
 
 //
-//float64
+// float64
 
 func (f *field) SetFloat64(p []byte) (int, error) {
 	x := Btoi(p[:f.size], f.e)
@@ -278,10 +306,10 @@ func (f *field) SetFloat64(p []byte) (int, error) {
 }
 
 //
-//struct
+// struct
 func (f *field) SetStruct(p []byte) (n int, _ error) {
 	for _, subf := range f.s.fields {
-		nw, err := subf.write(p[n:])
+		nw, err := subf.Write(p[n:])
 		if err != nil {
 			return n, err
 		}
@@ -291,7 +319,7 @@ func (f *field) SetStruct(p []byte) (n int, _ error) {
 }
 
 //
-//custom types
+// custom types
 
 func (f *field) SetCustom(p []byte) (n int, err error) {
 	count := f.num

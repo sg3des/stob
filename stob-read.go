@@ -2,10 +2,24 @@ package stob
 
 import (
 	"io"
+	"log"
 	"math"
 	"reflect"
 	"unsafe"
 )
+
+func init() {
+	log.SetFlags(log.Lshortfile)
+}
+
+type Reader interface {
+	io.Reader
+	Size
+}
+
+type Size interface {
+	Size() int
+}
 
 func (s *Struct) Read(p []byte) (n int, err error) {
 	for _, f := range s.fields {
@@ -16,73 +30,99 @@ func (s *Struct) Read(p []byte) (n int, err error) {
 			return n, io.ErrUnexpectedEOF
 		}
 
-		n += f.read(p[n:])
+		n += f.Read(p[n:])
 	}
 
-	return
+	return n, io.EOF
 }
 
 type fieldReader func(p []byte) int
 
 func (f *field) setReader() (err error) {
+	rt := f.rv.Type()
+	if f.rv.Kind() == reflect.Ptr {
+		rt = f.rv.Type().Elem()
+	}
+
+	rv := reflect.New(rt)
+
+	if _, ok := rv.Interface().(Reader); ok {
+		f.rk = f.rv.Kind()
+
+		f.Read = func(p []byte) int {
+			n, err := f.rv.Interface().(Reader).Read(p)
+			if err != nil {
+				return n
+			}
+
+			return n
+		}
+
+		return nil
+	}
+
+	// if _, ok := f.rv.Interface().(Reader); ok {
+	// 	return nil
+	// }
+
 	switch f.rk {
 	case reflect.String:
-		f.read = f.String
+		f.Read = f.String
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		f.read = f.Int
+		f.Read = f.Int
 
 	case reflect.Uint, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		f.read = f.Uint
+		f.Read = f.Uint
 
 	case reflect.Uint8:
-		f.read = f.Byte
+		f.Read = f.Byte
 
 	case reflect.Bool:
-		f.read = f.Bool
+		f.Read = f.Bool
 
 	case reflect.Float32:
-		f.read = f.Float32
+		f.Read = f.Float32
 	case reflect.Float64:
-		f.read = f.Float64
+		f.Read = f.Float64
 
 	case reflect.Slice:
 
 		switch f.rv.Interface().(type) {
 		case []string:
-			f.read = f.SliceString
+			f.Read = f.SliceString
 		case []int, []int8, []int16, []int32, []int64:
-			f.read = f.SliceInt
+			f.Read = f.SliceInt
 		case []uint, []uint16, []uint32, []uint64:
-			f.read = f.SliceUint
+			f.Read = f.SliceUint
 		case []byte:
-			f.read = f.Bytes
+			f.Read = f.Bytes
 		case []bool:
-			f.read = f.SliceBool
+			f.Read = f.SliceBool
 		default:
-			f.read = f.Custom
+			f.Read = f.Custom
 		}
 
 	case reflect.Array:
 
 		switch f.rv.Index(0).Interface().(type) {
 		case string:
-			f.read = f.SliceString
+			f.Read = f.SliceString
 		case int, int8, int16, int32, int64:
-			f.read = f.SliceInt
+			f.Read = f.SliceInt
 		case uint, uint16, uint32, uint64:
-			f.read = f.SliceUint
+			f.Read = f.SliceUint
 		case byte:
-			f.read = f.Bytes
+			f.Read = f.Bytes
 		case bool:
-			f.read = f.SliceBool
+			f.Read = f.SliceBool
 		default:
-			f.read = f.Custom
+			f.Read = f.Custom
 		}
 
 	case reflect.Struct:
 		f.s, err = newStruct(f.rv)
-		f.read = f.Struct
+		f.Read = f.Struct
 
 	case reflect.Ptr:
 		if f.rv.IsNil() {
@@ -90,10 +130,10 @@ func (f *field) setReader() (err error) {
 		}
 
 		f.s, err = newStruct(f.rv.Elem())
-		f.read = f.Struct
+		f.Read = f.Struct
 
 	default:
-		f.read = f.Custom
+		f.Read = f.Custom
 		// log.Printf("%T\n", f.rv.Interface())
 		// err = fmt.Errorf("Unknown field type, %s:%T", f.rsf.Name, f.rv.Interface())
 	}
@@ -102,7 +142,7 @@ func (f *field) setReader() (err error) {
 }
 
 //
-//string
+// string
 
 func putString(p []byte, s []byte, l int) int {
 	if l == 0 {
@@ -140,7 +180,7 @@ func (f *field) SliceString(p []byte) (n int) {
 }
 
 //
-//int
+// int
 
 func (f *field) Int(p []byte) int {
 	Itob(p[:f.size], f.rv.Int(), f.e)
@@ -162,7 +202,7 @@ func (f *field) SliceInt(p []byte) (n int) {
 }
 
 //
-//uint
+// uint
 
 func (f *field) Uint(p []byte) int {
 	Itob(p[:f.size], int64(f.rv.Uint()), f.e)
@@ -183,7 +223,7 @@ func (f *field) SliceUint(p []byte) (n int) {
 }
 
 //
-//byte
+// byte
 
 func (f *field) Byte(p []byte) int {
 	p[0] = byte(f.rv.Uint())
@@ -204,7 +244,7 @@ func (f *field) Bytes(p []byte) int {
 }
 
 //
-//bool
+// bool
 
 func (f *field) Bool(p []byte) int {
 	if f.rv.Bool() {
@@ -254,7 +294,7 @@ func (f *field) SliceFloat32(p []byte) (n int) {
 }
 
 //
-//float64
+// float64
 
 func (f *field) Float64(p []byte) int {
 	uf := math.Float64bits(f.rv.Float())
@@ -278,11 +318,11 @@ func (f *field) SliceFloat64(p []byte) (n int) {
 }
 
 //
-//struct
+// struct
 
 func (f *field) Struct(p []byte) (n int) {
 	for _, subf := range f.s.fields {
-		n += subf.read(p[n:])
+		n += subf.Read(p[n:])
 	}
 
 	return n
@@ -312,7 +352,7 @@ func (f *field) Custom(p []byte) int {
 	return count
 }
 
-//Itob convert int to bytes
+// Itob convert int to bytes
 func Itob(p []byte, x int64, e ByteOrder) {
 	l := len(p)
 

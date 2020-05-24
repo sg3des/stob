@@ -1,6 +1,7 @@
 package stob
 
 import (
+	"io/ioutil"
 	"reflect"
 	"strconv"
 )
@@ -52,8 +53,8 @@ type field struct {
 	len  int
 	e    ByteOrder
 
-	read  fieldReader
-	write fieldWriter
+	Read  fieldReader
+	Write fieldWriter
 
 	s *Struct
 }
@@ -124,7 +125,19 @@ func (f *field) lookupSizes() {
 	}
 }
 
-func (f *field) lookupStructSizes() {
+func (f *field) lookupStructSizes() (err error) {
+	if s, ok := f.rv.Interface().(Size); ok {
+		f.len = s.Size()
+		return
+	}
+
+	if f.s == nil {
+		f.s, err = newStruct(f.rv)
+		if err != nil {
+			return err
+		}
+	}
+
 	var structLen int
 
 	for _, subf := range f.s.fields {
@@ -133,4 +146,28 @@ func (f *field) lookupStructSizes() {
 
 	f.len = structLen
 
+	return nil
+}
+
+//
+//
+//
+
+func Marshal(x interface{}) ([]byte, error) {
+	s, err := NewStruct(x)
+	if err != nil {
+		return nil, err
+	}
+
+	return ioutil.ReadAll(s)
+}
+
+func Unmarshal(data []byte, x interface{}) error {
+	s, err := NewStruct(x)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.Write(data)
+	return err
 }

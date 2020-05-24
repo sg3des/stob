@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"math"
 	"math/rand"
@@ -49,6 +50,57 @@ func init() {
 
 // 	fmt.Println(hex.Dump(p))
 // }
+
+func TestRead(t *testing.T) {
+	a := YourStruct{
+		Struct:     SubStruct{Addr: net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}, IP: []byte{127, 0, 0, 1}},
+		PtrStruct:  &SubStruct{Addr: net.HardwareAddr{0x55, 0x55, 0x55, 0x55, 0x55, 0x55}},
+		CustomType: [4]byte{127, 0, 0, 1},
+		Str:        "string",
+		Int:        999,
+		Byte:       255,
+		Bytes:      []byte{1, 2, 3, 4, 5, 6, 7, 8},
+		Bytes4:     [4]byte{10, 11, 12, 13},
+		Bool:       rand.Intn(2) == 1,
+		Float32:    0.98765,
+		Uint16:     65500,
+	}
+
+	s, err := NewStruct(&a)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := ioutil.ReadAll(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Logf("% 02x", data)
+}
+
+func TestMarshal(t *testing.T) {
+	a := YourStruct{
+		Struct:     SubStruct{Addr: net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}, IP: []byte{127, 0, 0, 1}},
+		PtrStruct:  &SubStruct{Addr: net.HardwareAddr{0x55, 0x55, 0x55, 0x55, 0x55, 0x55}},
+		CustomType: [4]byte{127, 0, 0, 1},
+		Str:        "string",
+		Int:        999,
+		Byte:       255,
+		Bytes:      []byte{1, 2, 3, 4, 5, 6, 7, 8},
+		Bytes4:     [4]byte{10, 11, 12, 13},
+		Bool:       rand.Intn(2) == 1,
+		Float32:    0.98765,
+		Uint16:     65500,
+	}
+
+	data, err := Marshal(&a)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Logf("% 02x", data)
+}
 
 func TestWriteRead(t *testing.T) {
 	a := YourStruct{
@@ -119,7 +171,7 @@ func TestWriteRead(t *testing.T) {
 }
 
 func TestItob(t *testing.T) {
-	var p = make([]byte, 32)
+	p := make([]byte, 32)
 	Itob(p[0:4], 255, BigEndian)
 	if p[3] != 0xff {
 		t.Error("BigEndian failed")
